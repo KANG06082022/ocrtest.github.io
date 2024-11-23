@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖片文字識別</title>
+    <script src='https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
+    <style>
+       * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+h1 {
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.main-content {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+}
+
+.image-section, .text-section {
+    flex: 1;
+    min-width: 300px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.upload-area {
+    border: 2px dashed #ccc;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+    border-radius: 8px;
+}
+
+#imageInput {
+    display: none;
+}
+
+#preview {
+    max-width: 100%;
+    max-height: 500px;
+    display: none;
+    margin-top: 20px;
+}
+
+#uploadButton {
+    background-color: #4CAF50;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+#uploadButton:hover {
+    background-color: #45a049;
+}
+
+#result {
+    width: 100%;
+    min-height: 400px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-size: 16px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+#copyButton {
+    background-color: #008CBA;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    width: 100%;
+    transition: background-color 0.3s;
+}
+
+#copyButton:hover {
+    background-color: #007399;
+}
+
+#loading {
+    display: none;
+    margin: 20px 0;
+    color: #666;
+    font-size: 16px;
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .image-section, .text-section {
+        width: 100%;
+    }
+}
+#clearButton {
+    background-color: #dc3545;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    width: 100%;
+    transition: background-color 0.3s;
+    margin-top: 10px;
+}
+
+#clearButton:hover {
+    background-color: #c82333;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>圖片文字識別</h1>
+        </header>
+        
+        <div class="main-content">
+            <section class="image-section">
+                <div class="upload-area">
+                    <input type="file" id="imageInput" accept="image/*">
+                    <button id="uploadButton">選擇圖片</button>
+                    <div id="loading">正在識別中，請稍候...</div>
+                </div>
+                <img id="preview" alt="預覽圖片">
+            </section>
+
+            <section class="text-section">
+                <textarea id="result" placeholder="識別結果將顯示在這裡" readonly></textarea>
+                <button id="copyButton">複製文字</button>
+                <button id="clearButton">清空所有</button>
+            </section>
+        </div>
+    </div>
+
+    <script>
+     document.getElementById('uploadButton').addEventListener('click', () => {
+    document.getElementById('imageInput').click();
+});
+
+document.getElementById('imageInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // 顯示預覽
+    const preview = document.getElementById('preview');
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+
+    // 顯示載入提示
+    const loading = document.getElementById('loading');
+    loading.style.display = 'block';
+    loading.textContent = '正在載入 Tesseract.js...';
+    document.getElementById('result').value = '';
+
+    try {
+        // 創建 worker
+        loading.textContent = '正在初始化...';
+        const worker = await Tesseract.createWorker({
+            logger: progress => {
+                console.log(progress);
+                if (progress.status === 'downloading traineddata') {
+                    loading.textContent = '正在下載語言包...';
+                } else if (progress.status === 'recognizing text') {
+                    loading.textContent = `正在識別中...${(progress.progress * 100).toFixed(1)}%`;
+                } else {
+                    loading.textContent = `${progress.status}...`;
+                }
+            }
+        });
+
+        // 載入語言包
+        loading.textContent = '正在載入語言包...';
+        await worker.loadLanguage('chi_tra+eng');
+        
+        // 初始化
+        loading.textContent = '正在初始化語言包...';
+        await worker.initialize('chi_tra+eng');
+        
+        // 執行OCR
+        loading.textContent = '正在識別文字...';
+        const { data: { text } } = await worker.recognize(file);
+        
+        // 終止 worker
+        await worker.terminate();
+
+        // 顯示結果
+        document.getElementById('result').value = text || '無法識別文字';
+        loading.style.display = 'none';
+    } catch (error) {
+        console.error('OCR Error:', error);
+        alert('識別失敗: ' + error.message);
+        loading.style.display = 'none';
+    }
+});
+
+document.getElementById('copyButton').addEventListener('click', () => {
+    const result = document.getElementById('result');
+    result.select();
+    document.execCommand('copy');
+    alert('已複製到剪貼簿');
+});
+document.getElementById('clearButton').addEventListener('click', () => {
+    // 清空預覽圖片
+    const preview = document.getElementById('preview');
+    preview.src = '';
+    preview.style.display = 'none';
+    
+    // 清空文字結果
+    document.getElementById('result').value = '';
+    
+    // 清空文件輸入
+    document.getElementById('imageInput').value = '';
+    
+    // 隱藏加載提示
+    document.getElementById('loading').style.display = 'none';
+});
+    </script>
+</body>
+</html>
